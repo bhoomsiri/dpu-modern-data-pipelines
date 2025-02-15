@@ -41,6 +41,14 @@ def _validate_data():
     assert data.get("main") is not None
 
 
+def _validate_temperature_range():
+    with open("dags_path", "r") as f:
+        data = json.load(f)
+
+    assert data.get("main").get("temp") >= 30 
+    assert data.get("main").get("temp") <= 45
+
+
 def _create_weather_table():
     pg_hook = PostgresHook(
         postgres_conn_id="weather_postgres_conn",
@@ -103,6 +111,11 @@ with DAG(
         python_callable=_validate_data,
     )
 
+    validate_temperature_range = PythonOperator(
+        task_id="validate_temperature_range",
+        python_callable=_validate_temperature_range,
+    )
+
     create_weather_table = PythonOperator(
         task_id="create_weather_table",
         python_callable=_create_weather_table,
@@ -122,6 +135,6 @@ with DAG(
 
     end = EmptyOperator(task_id="end")
 
-    start >> get_weather_data >> validate_data >> load_data_to_postgres >> send_email
+    start >> get_weather_data >> [validate_data, validate_temperature_range] >> load_data_to_postgres >> send_email
     start >> create_weather_table >> load_data_to_postgres
     send_email >> end
